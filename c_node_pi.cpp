@@ -23,7 +23,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cmath>
-#include "serialib/serialib.h"
+#include "serialib.h"
 #include "adc_lib.h"
 
 #define  SER1_PORT   "/dev/ttyUSB0"
