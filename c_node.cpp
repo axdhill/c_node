@@ -16,12 +16,8 @@
 #include <sstream>
 #include <iterator>
 #include <fstream>
-
-#include <stdlib.h>
-#include <stdio.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <cmath>
 #include "serialib.h"
 #include "adc_lib.h"
