@@ -373,8 +373,8 @@ void feedback() {
 }
 
 int main(int argc, char** argv) {
-    if(argc < "4") {
-        print("\n\tc_node <TARGET_IP> <PORT_IN> <PORT_OUT>\n")
+    if(argc < 4) {
+        printf("\n\tc_node <TARGET_IP> <PORT_IN> <PORT_OUT>\n");
         return 0;
     }
 
