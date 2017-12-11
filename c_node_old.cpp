@@ -1,3 +1,8 @@
+/*
+@author Alex Hill 2017
+*/
+
+
 #include <chrono>
 #include <cstdlib>
 #include <signal.h>
@@ -16,18 +21,14 @@
 #include <sstream>
 #include <iterator>
 #include <fstream>
-
-#include <stdlib.h>
-#include <stdio.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <cmath>
 #include "serialib.h"
 #include "adc_lib.h"
 
-#define  SER1_PORT   "/dev/ttyUSB1"
-#define SER2_PORT "/dev/ttyUSB0"
+#define  SER1_PORT   "/dev/ttyUSB0"
+#define SER2_PORT "/dev/ttyUSB1"
 std::mutex pos_buffer_mutex;//you can use std::lock_guard if you want to be exception safe
 char pos_buffer[256];
 
@@ -106,7 +107,7 @@ void transmit_qc() {
     {
         printf("Ok, ASD1256 Chip ID = 0x%d\r\n", (int)id);
     }
-    ADS1256_CfgADC(ADS1256_GAIN_1, ADS1256_30000SPS);
+    ADS1256_CfgADC(ADS1256_GAIN_1, ADS1256_7500SPS);
     ADS1256_StartScan(0);
     ch_num = 8;
 
@@ -115,7 +116,7 @@ void transmit_qc() {
 
     while(!terminateProgram) {
 
-        for( int i = 0; i < 3; i++) {
+        for( int i = 0; i < 8; i++) {
             while((DRDY_IS_LOW() == 0));
 
             ADS1256_SetChannel(i);	/*Switch channel mode */
@@ -128,15 +129,21 @@ void transmit_qc() {
 
         bzero(buffer,256);
         sprintf(buffer,"%0.8f %0.8f %0.8f",volt[0]/1000000.,volt[1]/1000000.,volt[2]/1000000.);
-        //printf("\t%s\n",buffer);
-        j++;
+        
+	printf("\t%s\n",buffer);
+	//printf("\t %f %f %f %f %f %f %f \n",volt[0]/1000000.,volt[1]/1000000.,volt[2]/1000000.,
+	//	volt[3]/1000000.,volt[4]/1000000.,volt[5]/1000000.,volt[6]/1000000.);
+        if(volt[2]/1000000 > 0.02) {
+		printf("\n\n\t\t ERROR \n\n");
+	}
+	j++;
         //t_now = std::chrono::high_resolution_clock::now();
 
         sendbuf_n = sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
-        //printf("\t%i\n", sendbuf_n);
+        //printf("\t%i\n", buffer);
 
-        std::this_thread::sleep_for (std::chrono::milliseconds(20));
+        std::this_thread::sleep_for (std::chrono::milliseconds(2));
     }
     bcm2835_spi_end();
     bcm2835_close();
@@ -208,95 +215,6 @@ void receive_data() {
 
 
 
-
-void acquire(serialib* ser1, serialib* ser2) {
-	printf("ACQUIRE:::\n");
-    char buf[256];
-    int errorX,errorY;
-
-
-    float KdX = 0.0;
-    float KdY = 0.0;
-    float DARK_LEVEL = 0.07;
-    float value1,value2,value3,v1norm,v2norm,v1_v,v2_v,v1norm_old,v2norm_old,v3_old;
-    value3 = 0;
-	std::string errXstr;
-    std::string errYstr;
-    std::vector<float> v;
-    std::string bufstr;
-    int d = 0;
-    int dist = 1;
-    int i = 0;
-    while(value3 < DARK_LEVEL) {
-
-        pos_buffer_mutex.lock();
-        memcpy(buf, pos_buffer,256);
-        //printf("pos_buffer:%s\n",pos_buffer);
-        pos_buffer_mutex.unlock();
-        //printf("2\n");
-
-        bufstr = std::string(buf);
-        //printf("3\n");
-        //printf("%s\n",bufstr.c_str());
-        if(bufstr == "") {
-            std::this_thread::sleep_for (std::chrono::milliseconds(50));
-            continue;
-        }
-
-        std::istringstream processbuf(bufstr);
-        //printf("processbuf:%s\n",processbuf.str().c_str());
-
-        std::copy(std::istream_iterator<float>(processbuf),
-        std::istream_iterator<float>(),
-        std::back_inserter(v));
-        //printf("5\n");
-        printf("%0.8f,%0.8f,%0.8f\n",v[0],v[1],v[2]);
-        value3 = v[2];
-        v.clear();
-
-        value3 = float(value3);
-
-        if(i%4 == 0) {
-            errorX = dist;
-        }
-        if(i%4 == 1) {
-            errorY = dist;
-        }
-        if(i%4 == 2) {
-            errorX = -dist;
-        }
-        if(i%4 ==3 ) {
-            errorY = -dist;
-        }
-        i++;
-	dist++;
-        errXstr = std::to_string(errorX);
-        errYstr = std::to_string(errorY);
-
-        if(errorX > 0) {
-            errXstr = "+"+errXstr;
-        } else {
-            errXstr = errXstr;
-        }
-        if(errorY > 0) {
-            errYstr = "+"+errYstr;
-        } else {
-            errYstr = errYstr;
-        }
-
-        if(errorX != 0) {
-            ser2->WriteString((errXstr+";").c_str());
-        }
-        if(errorY != 0) {
-            ser1->WriteString((errYstr+";").c_str());
-        }
-        std::this_thread::sleep_for (std::chrono::milliseconds(50));
-    }
-
-    return;
-
-}
-
 void feedback() {
     signal (SIGINT, CtrlHandler);
     signal (SIGQUIT, CtrlHandler);
@@ -317,29 +235,29 @@ void feedback() {
     printf("||||| K: %f %f\n",KpX,KpY);
 
     printf("feedback loop\n");
-
-    serialib ser1;
-    serialib ser2;
-
-    int ret;
-    char ser_buf[128];
-    ret = ser1.Open(SER1_PORT,57600);
-    // Open serial link at 115200 bauds
-    if (ret != 1) {                                                           // If an error occured...
-        printf ("Error while opening port. Permission problem ?\n");        // ... display a message ...
-        return;                                                         // ... quit the application
-    }
-    printf ("Serial port opened successfully !\n");
-
-    ret = ser2.Open(SER2_PORT,57600);                                        // Open serial link at 115200 bauds
-    if (ret != 1) {                                                           // If an error occured...
-        printf ("Error while opening port. Permission problem ?\n");        // ... display a message ...
-        return;                                                         // ... quit the application
-    }
-    printf ("Serial port opened successfully !\n");
-
-    ser1.WriteString("C32H512c;");
-    ser2.WriteString("C32H512c;");
+// 
+//     serialib ser1;
+//     serialib ser2;
+// 
+//     int ret;
+//     char ser_buf[128];
+//     ret = ser1.Open(SER1_PORT,57600);
+//     // Open serial link at 115200 bauds
+//     if (ret != 1) {                                                           // If an error occured...
+//         printf ("Error while opening port. Permission problem ?\n");        // ... display a message ...
+//         return;                                                         // ... quit the application
+//     }
+//     printf ("Serial port opened successfully !\n");
+// 
+//     ret = ser2.Open(SER2_PORT,57600);                                        // Open serial link at 115200 bauds
+//     if (ret != 1) {                                                           // If an error occured...
+//         printf ("Error while opening port. Permission problem ?\n");        // ... display a message ...
+//         return;                                                         // ... quit the application
+//     }
+//     printf ("Serial port opened successfully !\n");
+// 
+//     ser1.WriteString("C32H512c;");
+//     ser2.WriteString("C32H512c;");
 
     char buf[256];
     int errorX,errorY;
@@ -385,12 +303,13 @@ void feedback() {
         value2 = v[1];
         value3 = v[2];
         v.clear();
-        value1 = float(value1)-2.5;
-        value2 = float(value2)-2.5;
+        value1 = float(value1)-0.5;
+        value2 = float(value2)-0.5;
         value3 = float(value3);
 
         v1norm = value1/value3;
         v2norm = value2/value3;
+
 
 
 
@@ -402,14 +321,21 @@ void feedback() {
         errorX = int(round(v1norm * KpX  + v1_v * KdX));
         errorY = int(round(v2norm * KpY +  v1_v * KdY));
 
-
+        //
+        // if((v1norm == v1norm_old) && (v2norm == v2norm_old)) {
+        //     //printf("%i Dropped\n", d);
+        //     //d++;
+        //     //std::this_thread::sleep_for (std::chrono::milliseconds(5));
+        //     errorX = 0;
+        //     errorY = 0;
+        //     continue;
+        // }
 
         v1norm_old = v1norm;
         v2norm_old = v2norm;
         if(value3 < DARK_LEVEL) {
             printf("LOST SIGNAL\n");
             std::this_thread::sleep_for (std::chrono::milliseconds(10));
-            //acquire(&ser1, &ser2);
             continue;
         }
         errXstr = std::to_string(errorX);
@@ -426,12 +352,12 @@ void feedback() {
             errYstr = errYstr;
         }
 
-        if(errorX != 0) {
-            ser2.WriteString((errXstr+";").c_str());
-        }
-        if(errorY != 0) {
-            ser1.WriteString((errYstr+";").c_str());
-        }
+//         if(errorX != 0) {
+//             ser2.WriteString((errXstr+";").c_str());
+//         }
+//         if(errorY != 0) {
+//             ser1.WriteString((errYstr+";").c_str());
+//         }
 
         v1norm_old = v1norm;
         v2norm_old = v2norm;
@@ -439,7 +365,7 @@ void feedback() {
 
 
 
-        std::this_thread::sleep_for (std::chrono::milliseconds(5));
+        std::this_thread::sleep_for (std::chrono::milliseconds(20));
     }
     // ser1.close();
     // ser2.close();
@@ -447,6 +373,12 @@ void feedback() {
 }
 
 int main(int argc, char** argv) {
+    if(argc < 4) {
+        printf("\n\tc_node <TARGET_IP> <PORT_IN> <PORT_OUT>\n");
+        return 0;
+    }
+
+
     signal (SIGINT, CtrlHandler);
     signal (SIGQUIT, CtrlHandler);
 
@@ -457,13 +389,13 @@ int main(int argc, char** argv) {
 
     printf("%s\t%i\t%i\n",UDP_IP,portno,portno_tx);
 
-    //std::thread t_transmit_qc(transmit_qc);
+    std::thread t_transmit_qc(transmit_qc);
     std::thread t_receive(receive_data);
     std::thread t_feedback(feedback);
 
     // Initialize variables
 
-    //t_transmit_qc.join();
+    t_transmit_qc.join();
     t_receive.join();
     t_feedback.join();
 
