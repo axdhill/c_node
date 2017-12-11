@@ -1,3 +1,8 @@
+/*
+@author Alex Hill 2017
+*/
+
+
 #include <chrono>
 #include <cstdlib>
 #include <signal.h>
@@ -16,15 +21,12 @@
 #include <sstream>
 #include <iterator>
 #include <fstream>
-
-#include <stdlib.h>
-#include <stdio.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <cmath>
 #include "serialib.h"
 #include "adc_lib.h"
+
 
 #define  SER1_PORT   "/dev/ttyUSB1"
 #define SER2_PORT "/dev/ttyUSB0"
