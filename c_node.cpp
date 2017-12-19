@@ -28,8 +28,8 @@
 #include "adc_lib.h"
 
 
-#define  SER1_PORT   "/dev/ttyUSB1"
-#define SER2_PORT "/dev/ttyUSB0"
+#define  SER1_PORT   "/dev/ttyUSB0"
+#define SER2_PORT "/dev/ttyUSB2"
 std::mutex pos_buffer_mutex;//you can use std::lock_guard if you want to be exception safe
 char pos_buffer[256];
 
@@ -219,7 +219,7 @@ void acquire(serialib* ser1, serialib* ser2) {
 
     float KdX = 0.0;
     float KdY = 0.0;
-    float DARK_LEVEL = 0.07;
+    float DARK_LEVEL = 0.15;
     float value1,value2,value3,v1norm,v2norm,v1_v,v2_v,v1norm_old,v2norm_old,v3_old;
     value3 = 0;
 	std::string errXstr;
@@ -340,8 +340,8 @@ void feedback() {
     }
     printf ("Serial port opened successfully !\n");
 
-    ser1.WriteString("C32H512c;");
-    ser2.WriteString("C32H512c;");
+    ser1.WriteString("C33H1024c;");
+    ser2.WriteString("C33H1024c;");
 
     char buf[256];
     int errorX,errorY;
@@ -349,7 +349,7 @@ void feedback() {
 
     float KdX = 0.0;
     float KdY = 0.0;
-    float DARK_LEVEL = 0.07;
+    float DARK_LEVEL = 0.04;
     float value1,value2,value3,v1norm,v2norm,v1_v,v2_v,v1norm_old,v2norm_old,v3_old;
     std::string errXstr;
     std::string errYstr;
@@ -381,7 +381,7 @@ void feedback() {
         std::istream_iterator<float>(),
         std::back_inserter(v));
         //printf("5\n");
-        printf("%0.8f,%0.8f,%0.8f\n",v[0],v[1],v[2]);
+        printf("%0.8f,%0.8f,%0.8f\n",(v[0])/v[2],(v[1])/v[2],v[2]);
 
         value1 = v[0];
         value2 = v[1];
@@ -410,13 +410,13 @@ void feedback() {
         v2norm_old = v2norm;
         if(value3 < DARK_LEVEL) {
             printf("LOST SIGNAL\n");
-            std::this_thread::sleep_for (std::chrono::milliseconds(10));
+            std::this_thread::sleep_for (std::chrono::milliseconds(10));//10
             //acquire(&ser1, &ser2);
             continue;
         }
         errXstr = std::to_string(errorX);
         errYstr = std::to_string(errorY);
-
+	printf("%i %i\n", errorX,errorY);
         if(errorX > 0) {
             errXstr = "+"+errXstr;
         } else {
@@ -441,7 +441,7 @@ void feedback() {
 
 
 
-        std::this_thread::sleep_for (std::chrono::milliseconds(5));
+        std::this_thread::sleep_for (std::chrono::milliseconds(10));
     }
     // ser1.close();
     // ser2.close();

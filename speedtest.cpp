@@ -79,6 +79,9 @@ void transmit_qc() {
     long l_time;
 
 
+    timespec deadline;
+    deadline.tv_sec = 0;
+    deadline.tv_nsec = 10000000;    
     uint8_t id;
     int32_t adc[8];
     float volt[8];
@@ -94,7 +97,7 @@ void transmit_qc() {
 		//a = ((float)std::rand())/((float)RAND_MAX),
 		float  b = ((float)std::rand())/((float)RAND_MAX), c = ((float)std::rand())/((float)RAND_MAX);
 		// a=std::time(nullptr);
-		sprintf(buffer,";%f,%f,%f;",a/20.,b,c);
+		sprintf(buffer,";%f,%f,%f;",a/10.,b,c);
 		// sprintf(send_buf,"%f",a);
 		a++;
         //t_now = std::chrono::high_resolution_clock::now();
@@ -102,7 +105,7 @@ void transmit_qc() {
 
         //printf("\t%i\n", sendbuf_n);
 
-        std::this_thread::sleep_for (std::chrono::milliseconds(10));
+        clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
     }
 
     return;
