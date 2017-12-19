@@ -81,7 +81,7 @@ void transmit_qc() {
 
     timespec deadline;
     deadline.tv_sec = 0;
-    deadline.tv_nsec = 10000000;    
+    deadline.tv_nsec = 20000000;    
     uint8_t id;
     int32_t adc[8];
     float volt[8];

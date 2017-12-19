@@ -115,6 +115,11 @@ void transmit_qc() {
     int sendbuf_n;
     ADS1256_VAR_T* g_tADS1256 = get_state();
 
+
+
+    timespec deadline;
+    deadline.tv_sec = 0;
+    deadline.tv_nsec = 20000000;    
     while(!terminateProgram) {
 
         for( int i = 0; i < 3; i++) {
@@ -138,7 +143,8 @@ void transmit_qc() {
 
         //printf("\t%i\n", sendbuf_n);
 
-        std::this_thread::sleep_for (std::chrono::milliseconds(20));
+        clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
+
     }
     bcm2835_spi_end();
     bcm2835_close();
@@ -207,8 +213,6 @@ void receive_data() {
     printf("Killed vicon thread\n");
     return;
 }
-
-
 
 
 void acquire(serialib* ser1, serialib* ser2) {
@@ -357,6 +361,10 @@ void feedback() {
     printf("Loop running...\n");
     std::string bufstr;
     int d = 0;
+
+    timespec deadline;
+    deadline.tv_sec = 0;
+    deadline.tv_nsec = 20000000; 
     while(!terminateProgram) {
         //printf("1\n");
 
@@ -370,7 +378,7 @@ void feedback() {
         //printf("3\n");
         //printf("%s\n",bufstr.c_str());
         if(bufstr == "") {
-            std::this_thread::sleep_for (std::chrono::milliseconds(50));
+            clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
             continue;
         }
 
@@ -410,13 +418,14 @@ void feedback() {
         v2norm_old = v2norm;
         if(value3 < DARK_LEVEL) {
             printf("LOST SIGNAL\n");
-            std::this_thread::sleep_for (std::chrono::milliseconds(10));//10
+            clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
+
             //acquire(&ser1, &ser2);
             continue;
         }
         errXstr = std::to_string(errorX);
         errYstr = std::to_string(errorY);
-	printf("%i %i\n", errorX,errorY);
+	    printf("%i %i\n", errorX,errorY);
         if(errorX > 0) {
             errXstr = "+"+errXstr;
         } else {
@@ -441,7 +450,8 @@ void feedback() {
 
 
 
-        std::this_thread::sleep_for (std::chrono::milliseconds(10));
+        clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
+
     }
     // ser1.close();
     // ser2.close();
