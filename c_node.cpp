@@ -28,10 +28,15 @@
 #include "adc_lib.h"
 
 
-#define  SER1_PORT   "/dev/ttyUSB0"
-#define SER2_PORT "/dev/ttyUSB2"
+#define  SER1_PORT   "/dev/ttyUSB1"
+#define SER2_PORT "/dev/ttyUSB0"
 std::mutex pos_buffer_mutex;//you can use std::lock_guard if you want to be exception safe
 char pos_buffer[256];
+
+
+template <typename T> int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
 
 
 int portno_tx;
@@ -108,7 +113,7 @@ void transmit_qc() {
     {
         printf("Ok, ASD1256 Chip ID = 0x%d\r\n", (int)id);
     }
-    ADS1256_CfgADC(ADS1256_GAIN_1, ADS1256_30000SPS);
+    ADS1256_CfgADC(ADS1256_GAIN_1, ADS1256_7500SPS);
     ADS1256_StartScan(0);
     ch_num = 8;
 
@@ -119,7 +124,7 @@ void transmit_qc() {
 
     timespec deadline;
     deadline.tv_sec = 0;
-    deadline.tv_nsec = 20000000;    
+    deadline.tv_nsec = 2000000;    
     while(!terminateProgram) {
 
         for( int i = 0; i < 3; i++) {
@@ -220,7 +225,6 @@ void acquire(serialib* ser1, serialib* ser2) {
     char buf[256];
     int errorX,errorY;
 
-
     float KdX = 0.0;
     float KdY = 0.0;
     float DARK_LEVEL = 0.15;
@@ -231,7 +235,8 @@ void acquire(serialib* ser1, serialib* ser2) {
     std::vector<float> v;
     std::string bufstr;
     int d = 0;
-    int dist = 1;
+    float r = 20.;
+    float th = 0.;
     int i = 0;
     while(value3 < DARK_LEVEL) {
 
@@ -262,20 +267,14 @@ void acquire(serialib* ser1, serialib* ser2) {
 
         value3 = float(value3);
 
-        if(i%4 == 0) {
-            errorX = dist;
-        }
-        if(i%4 == 1) {
-            errorY = dist;
-        }
-        if(i%4 == 2) {
-            errorX = -dist;
-        }
-        if(i%4 ==3 ) {
-            errorY = -dist;
-        }
         i++;
-	dist++;
+	    th = fmod((th+30.0/(pow(r,(1/3.)))),360);
+        r += 0.25;
+
+
+        errorX = round(r*cos(th*3.14159/180.));
+        errorY = round(r*sin(th*3.14159/180.));
+        
         errXstr = std::to_string(errorX);
         errYstr = std::to_string(errorY);
 
@@ -296,7 +295,7 @@ void acquire(serialib* ser1, serialib* ser2) {
         if(errorY != 0) {
             ser1->WriteString((errYstr+";").c_str());
         }
-        std::this_thread::sleep_for (std::chrono::milliseconds(50));
+        std::this_thread::sleep_for (std::chrono::milliseconds(20));
     }
 
     return;
@@ -353,7 +352,7 @@ void feedback() {
 
     float KdX = 0.0;
     float KdY = 0.0;
-    float DARK_LEVEL = 0.04;
+    float DARK_LEVEL = 0.15;
     float value1,value2,value3,v1norm,v2norm,v1_v,v2_v,v1norm_old,v2norm_old,v3_old;
     std::string errXstr;
     std::string errYstr;
@@ -389,7 +388,7 @@ void feedback() {
         std::istream_iterator<float>(),
         std::back_inserter(v));
         //printf("5\n");
-        printf("%0.8f,%0.8f,%0.8f\n",(v[0])/v[2],(v[1])/v[2],v[2]);
+//        printf("%0.8f,%0.8f,%0.8f\n",(v[0])/v[2],(v[1])/v[2],v[2]);
 
         value1 = v[0];
         value2 = v[1];
@@ -401,6 +400,10 @@ void feedback() {
 
         v1norm = value1/value3;
         v2norm = value2/value3;
+
+        v1norm = sgn(v1norm)*v1norm*v1norm;
+        v2norm = sgn(v2norm)*v2norm*v2norm;
+        printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
 
 
 
@@ -418,9 +421,9 @@ void feedback() {
         v2norm_old = v2norm;
         if(value3 < DARK_LEVEL) {
             printf("LOST SIGNAL\n");
-            clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
+            //clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
 
-            //acquire(&ser1, &ser2);
+            acquire(&ser1, &ser2);
             continue;
         }
         errXstr = std::to_string(errorX);
