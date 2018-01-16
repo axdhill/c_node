@@ -352,7 +352,7 @@ void feedback() {
 
     float KdX = 0.0;
     float KdY = 0.0;
-    float DARK_LEVEL = 0.15;
+    float DARK_LEVEL = 0.1;
     float value1,value2,value3,v1norm,v2norm,v1_v,v2_v,v1norm_old,v2norm_old,v3_old;
     std::string errXstr;
     std::string errYstr;
@@ -360,6 +360,9 @@ void feedback() {
     printf("Loop running...\n");
     std::string bufstr;
     int d = 0;
+
+    float Ix = 0.0;
+    float Iy = 0.0;
 
     timespec deadline;
     deadline.tv_sec = 0;
@@ -394,38 +397,40 @@ void feedback() {
         value2 = v[1];
         value3 = v[2];
         v.clear();
-        value1 = float(value1)-2.5;
-        value2 = float(value2)-2.5;
+        value1 = float(value1)-2.385;
+        value2 = float(value2)-2.385;
         value3 = float(value3);
 
         v1norm = value1/value3;
         v2norm = value2/value3;
 
-        v1norm = sgn(v1norm)*v1norm*v1norm;
-        v2norm = sgn(v2norm)*v2norm*v2norm;
+        // printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
+
+        v1norm = sgn(v1norm)*pow(fabs(v1norm),6.0/5.);
+        v2norm = sgn(v2norm)*pow(fabs(v2norm),6.0/5.);
         printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
-
-
 
         v1_v = (v1norm - v1norm_old);
         v2_v = (v2norm - v2norm_old);
 
-
-
-        errorX = int(round(v1norm * KpX  + v1_v * KdX));
-        errorY = int(round(v2norm * KpY +  v1_v * KdY));
-
-
+        errorX = int(round(v1norm * KpX  ));
+        errorY = int(round(v2norm * KpY ));
 
         v1norm_old = v1norm;
         v2norm_old = v2norm;
         if(value3 < DARK_LEVEL) {
             printf("LOST SIGNAL\n");
-            //clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
+            clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
 
-            acquire(&ser1, &ser2);
+            //acquire(&ser1, &ser2);
             continue;
         }
+
+
+
+        // Ix += v1norm/100.0;
+        // Iy += v2norm/100.0;
+
         errXstr = std::to_string(errorX);
         errYstr = std::to_string(errorY);
 	    printf("%i %i\n", errorX,errorY);
