@@ -82,10 +82,10 @@ void transmit_qc() {
     uint8_t id;
     int32_t adc[8];
     float volt[8];
-    uint8_t i;
     uint8_t ch_num;
     int32_t iTemp;
     uint8_t buf[3];
+    int error_count = 0;
     if (!bcm2835_init())
         return;
     bcm2835_spi_begin();
@@ -108,29 +108,33 @@ void transmit_qc() {
     {
         printf("Ok, ASD1256 Chip ID = 0x%d\r\n", (int)id);
     }
-    ADS1256_CfgADC(ADS1256_GAIN_1, ADS1256_30000SPS);
+    ADS1256_CfgADC(ADS1256_GAIN_1, ADS1256_7500SPS);
     ADS1256_StartScan(0);
     ch_num = 8;
 
     int sendbuf_n;
     ADS1256_VAR_T* g_tADS1256 = get_state();
-
+    float v0,v1,v2;
     while(!terminateProgram) {
 
         for( int i = 0; i < 3; i++) {
             while((DRDY_IS_LOW() == 0));
-
             ADS1256_SetChannel(i);	/*Switch channel mode */
     		bsp_DelayUS(25);
             adc[i] = ADS1256_ReadData();
             volt[i] = (adc[i] * 100.) / 167.;
+            // printf("\tMeasured voltage %f\n", volt[i]);
+            std::this_thread::sleep_for (std::chrono::microseconds(200));
+
         }
 
-
+        v0 = volt[0]/1000000.;
+        v1 = volt[1]/1000000.;
+        v2 = volt[2]/1000000.;
 
         bzero(buffer,256);
-        sprintf(buffer,"%0.8f %0.8f %0.8f",volt[0]/1000000.,volt[1]/1000000.,volt[2]/1000000.);
-        //printf("\t%s\n",buffer);
+        sprintf(buffer,"%0.8f %0.8f %0.8f",v2,v1,v0);
+        printf("\t%s\n",buffer);
         j++;
         //t_now = std::chrono::high_resolution_clock::now();
 
@@ -325,7 +329,7 @@ void feedback() {
 
     int ret;
     char ser_buf[128];
-    ret = ser1.Open(SER1_PORT,57600);
+    //ret = ser1.Open(SER1_PORT,57600);
     // Open serial link at 115200 bauds
     if (ret != 1) {                                                           // If an error occured...
         printf ("Error while opening port. Permission problem ?\n");        // ... display a message ...
@@ -459,15 +463,15 @@ int main(int argc, char** argv) {
 
     printf("%s\t%i\t%i\n",UDP_IP,portno,portno_tx);
 
-    //std::thread t_transmit_qc(transmit_qc);
-    std::thread t_receive(receive_data);
-    std::thread t_feedback(feedback);
+    std::thread t_transmit_qc(transmit_qc);
+    //std::thread t_receive(receive_data);
+//    std::thread t_feedback(feedback);
 
     // Initialize variables
 
-    //t_transmit_qc.join();
-    t_receive.join();
-    t_feedback.join();
+    t_transmit_qc.join();
+    //t_receive.join();
+  //  t_feedback.join();
 
     return 0;
 }
