@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <thread>
-#include <mutex>
+#include <atomic>
 #include <netdb.h>
 #include <vector>
 #include <string>
@@ -28,14 +28,13 @@
 #include "adc_lib.h"
 
 
-#define  SER1_PORT   "/dev/ttyUSB1"
-#define SER2_PORT "/dev/ttyUSB0"
-std::mutex pos_buffer_mutex;//you can use std::lock_guard if you want to be exception safe
+std::atomic<char*> data;
 char pos_buffer[256];
 
 
 int portno_tx;
 int portno;
+int delaytime;
 char UDP_IP[256];
 
 
@@ -81,7 +80,7 @@ void transmit_qc() {
 
     timespec deadline;
     deadline.tv_sec = 0;
-    deadline.tv_nsec = 20000000;    
+    deadline.tv_nsec = delaytime*1000000;    
     uint8_t id;
     int32_t adc[8];
     float volt[8];
@@ -161,11 +160,8 @@ void receive_data() {
         //printf("received message: \"%s\"\n", buf);
         //}
         printf("%s\n",buf);
+        data.store(buf, std::memory_order_relaxed);
 
-        pos_buffer_mutex.lock();
-        bzero(pos_buffer,256);
-        memcpy(pos_buffer, buf, 256);
-        pos_buffer_mutex.unlock();
 
         //std::this_thread::sleep_for (std::chrono::milliseconds(5));
     }
@@ -182,6 +178,7 @@ int main(int argc, char** argv) {
     memcpy(UDP_IP, argv[1],256);
     portno = atoi(argv[2]);
     portno_tx = atoi(argv[3]);
+    delaytime = atoi(argv[4]);
 
 
     printf("%s\t%i\t%i\n",UDP_IP,portno,portno_tx);

@@ -14,9 +14,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <thread>
-#include <mutex>
 #include <netdb.h>
 #include <vector>
+#include <atomic>
 #include <string>
 #include <sstream>
 #include <iterator>
@@ -30,7 +30,7 @@
 
 #define  SER1_PORT   "/dev/ttyUSB1"
 #define SER2_PORT "/dev/ttyUSB0"
-std::mutex pos_buffer_mutex;//you can use std::lock_guard if you want to be exception safe
+std::atomic<char*> data;
 char pos_buffer[256];
 
 
@@ -201,106 +201,13 @@ void receive_data() {
         // }
         //}
         buf[recvlen] = 0;
-        //printf("received %d bytes\n", recvlen);
-        //if (recvlen > 0) {
-
-        //printf("received message: \"%s\"\n", buf);
-        //}
-
-            pos_buffer_mutex.lock();
-            bzero(pos_buffer,256);
-            memcpy(pos_buffer, buf, 256);
-            pos_buffer_mutex.unlock();
-
-        //std::this_thread::sleep_for (std::chrono::milliseconds(5));
+        data.store(buf, std::memory_order_relaxed);
     }
     close(fd);
     printf("Killed vicon thread\n");
     return;
 }
 
-
-void acquire(serialib* ser1, serialib* ser2) {
-	printf("ACQUIRE:::\n");
-    char buf[256];
-    int errorX,errorY;
-
-    float KdX = 0.0;
-    float KdY = 0.0;
-    float DARK_LEVEL = 0.15;
-    float value1,value2,value3,v1norm,v2norm,v1_v,v2_v,v1norm_old,v2norm_old,v3_old;
-    value3 = 0;
-	std::string errXstr;
-    std::string errYstr;
-    std::vector<float> v;
-    std::string bufstr;
-    int d = 0;
-    float r = 20.;
-    float th = 0.;
-    int i = 0;
-    while(value3 < DARK_LEVEL) {
-
-        pos_buffer_mutex.lock();
-        memcpy(buf, pos_buffer,256);
-        //printf("pos_buffer:%s\n",pos_buffer);
-        pos_buffer_mutex.unlock();
-        //printf("2\n");
-
-        bufstr = std::string(buf);
-        //printf("3\n");
-        //printf("%s\n",bufstr.c_str());
-        if(bufstr == "") {
-            std::this_thread::sleep_for (std::chrono::milliseconds(50));
-            continue;
-        }
-
-        std::istringstream processbuf(bufstr);
-        //printf("processbuf:%s\n",processbuf.str().c_str());
-
-        std::copy(std::istream_iterator<float>(processbuf),
-        std::istream_iterator<float>(),
-        std::back_inserter(v));
-        //printf("5\n");
-        printf("%0.8f,%0.8f,%0.8f\n",v[0],v[1],v[2]);
-        value3 = v[2];
-        v.clear();
-
-        value3 = float(value3);
-
-        i++;
-	    th = fmod((th+30.0/(pow(r,(1/3.)))),360);
-        r += 0.25;
-
-
-        errorX = round(r*cos(th*3.14159/180.));
-        errorY = round(r*sin(th*3.14159/180.));
-        
-        errXstr = std::to_string(errorX);
-        errYstr = std::to_string(errorY);
-
-        if(errorX > 0) {
-            errXstr = "+"+errXstr;
-        } else {
-            errXstr = errXstr;
-        }
-        if(errorY > 0) {
-            errYstr = "+"+errYstr;
-        } else {
-            errYstr = errYstr;
-        }
-
-        if(errorX != 0) {
-            ser2->WriteString((errXstr+";").c_str());
-        }
-        if(errorY != 0) {
-            ser1->WriteString((errYstr+";").c_str());
-        }
-        std::this_thread::sleep_for (std::chrono::milliseconds(20));
-    }
-
-    return;
-
-}
 
 void feedback() {
     signal (SIGINT, CtrlHandler);
@@ -346,7 +253,7 @@ void feedback() {
     ser1.WriteString("C33H1024c;");
     ser2.WriteString("C33H1024c;");
 
-    char buf[256];
+    char* buf;
     int errorX,errorY;
 
 
@@ -366,22 +273,19 @@ void feedback() {
 
     timespec deadline;
     deadline.tv_sec = 0;
-    deadline.tv_nsec = 20000000; 
+    deadline.tv_nsec = 10000000; 
+    bool signal_lost = true;
     while(!terminateProgram) {
-        //printf("1\n");
-
-        pos_buffer_mutex.lock();
-        memcpy(buf, pos_buffer,256);
-        //printf("pos_buffer:%s\n",pos_buffer);
-        pos_buffer_mutex.unlock();
-        //printf("2\n");
-
+        buf = data.load(std::memory_order_relaxed);
+        if(buf == NULL) {
+            clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
+            continue;
+        }
         bufstr = std::string(buf);
         //printf("3\n");
         //printf("%s\n",bufstr.c_str());
         if(bufstr == "") {
-            clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
-            continue;
+           
         }
 
         std::istringstream processbuf(bufstr);
@@ -404,11 +308,12 @@ void feedback() {
         v1norm = value1/value3;
         v2norm = value2/value3;
 
-        // printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
+        //printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
 
-        v1norm = sgn(v1norm)*pow(fabs(v1norm),6.0/5.);
-        v2norm = sgn(v2norm)*pow(fabs(v2norm),6.0/5.);
-        printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
+        v1norm = sgn(v1norm)*pow(fabs(v1norm),7.0/5.);
+        v2norm = sgn(v2norm)*pow(fabs(v2norm),7.0/5.);
+        //ABC
+	//printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
 
         v1_v = (v1norm - v1norm_old);
         v2_v = (v2norm - v2norm_old);
@@ -421,10 +326,14 @@ void feedback() {
         if(value3 < DARK_LEVEL) {
             printf("LOST SIGNAL\n");
             clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
-
+	    signal_lost = true;
             //acquire(&ser1, &ser2);
             continue;
         }
+	if(signal_lost) {
+		printf("LOCKED...\n");
+	}
+	signal_lost = false;
 
 
 
@@ -433,7 +342,7 @@ void feedback() {
 
         errXstr = std::to_string(errorX);
         errYstr = std::to_string(errorY);
-	    printf("%i %i\n", errorX,errorY);
+	    //printf("%i %i\n", errorX,errorY);
         if(errorX > 0) {
             errXstr = "+"+errXstr;
         } else {
