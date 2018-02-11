@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <thread>
-#include <mutex>
+#include <atomic>
 #include <netdb.h>
 #include <vector>
 #include <string>
@@ -30,7 +30,9 @@
 
 #define  SER1_PORT   "/dev/ttyUSB1"
 #define SER2_PORT "/dev/ttyUSB0"
-std::mutex pos_buffer_mutex;//you can use std::lock_guard if you want to be exception safe
+std::atomic<unsigned> data;
+
+
 char pos_buffer[256];
 
 
@@ -190,29 +192,11 @@ void receive_data() {
     }
 
 
-
     printf("Rx running...\n");
     while(!terminateProgram) {
-        //printf("waiting on port %d\n", portno);
-        //while(true) {
         recvlen = recvfrom(fd, buf, 256, 0, (struct sockaddr *)&remaddr, &addrlen);
-        // if(recvlen <= 0 ){
-        //     break;
-        // }
-        //}
         buf[recvlen] = 0;
-        //printf("received %d bytes\n", recvlen);
-        //if (recvlen > 0) {
-
-        //printf("received message: \"%s\"\n", buf);
-        //}
-
-            pos_buffer_mutex.lock();
-            bzero(pos_buffer,256);
-            memcpy(pos_buffer, buf, 256);
-            pos_buffer_mutex.unlock();
-
-        //std::this_thread::sleep_for (std::chrono::milliseconds(5));
+		data.store(buf, std::memory_order_relaxed);
     }
     close(fd);
     printf("Killed vicon thread\n");
@@ -240,11 +224,7 @@ void acquire(serialib* ser1, serialib* ser2) {
     int i = 0;
     while(value3 < DARK_LEVEL) {
 
-        pos_buffer_mutex.lock();
-        memcpy(buf, pos_buffer,256);
-        //printf("pos_buffer:%s\n",pos_buffer);
-        pos_buffer_mutex.unlock();
-        //printf("2\n");
+        buf = data.load(std::memory_order_relaxed);
 
         bufstr = std::string(buf);
         //printf("3\n");
@@ -367,11 +347,8 @@ void feedback() {
     while(!terminateProgram) {
         //printf("1\n");
 
-        pos_buffer_mutex.lock();
-        memcpy(buf, pos_buffer,256);
-        //printf("pos_buffer:%s\n",pos_buffer);
-        pos_buffer_mutex.unlock();
-        //printf("2\n");
+        buf = data.load(std::memory_order_relaxed);
+
 
         bufstr = std::string(buf);
         //printf("3\n");

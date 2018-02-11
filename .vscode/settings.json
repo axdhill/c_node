@@ -41,6 +41,12 @@
         "tuple": "cpp",
         "type_traits": "cpp",
         "typeinfo": "cpp",
-        "utility": "cpp"
+        "utility": "cpp",
+        "iterator": "cpp",
+        "string": "cpp",
+        "vector": "cpp",
+        "__config": "cpp",
+        "__nullptr": "cpp",
+        "algorithm": "cpp"
     }
 }
