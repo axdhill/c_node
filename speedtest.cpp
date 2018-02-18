@@ -2,7 +2,7 @@
 @author Alex Hill 2017
 */
 
-
+#include <time.h>
 #include <chrono>
 #include <cstdlib>
 #include <signal.h>
@@ -24,14 +24,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <cmath>
-#include "serialib.h"
-#include "adc_lib.h"
 
 
-#define  SER1_PORT   "/dev/ttyUSB1"
-#define SER2_PORT "/dev/ttyUSB0"
-std::mutex pos_buffer_mutex;//you can use std::lock_guard if you want to be exception safe
-char pos_buffer[256];
 
 
 int portno_tx;
@@ -104,8 +98,8 @@ void transmit_qc() {
         sendbuf_n = sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
         //printf("\t%i\n", sendbuf_n);
-
-        clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
+	usleep(15000);
+        //clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
     }
 
     return;
@@ -162,10 +156,6 @@ void receive_data() {
         //}
         printf("%s\n",buf);
 
-        pos_buffer_mutex.lock();
-        bzero(pos_buffer,256);
-        memcpy(pos_buffer, buf, 256);
-        pos_buffer_mutex.unlock();
 
         //std::this_thread::sleep_for (std::chrono::milliseconds(5));
     }
