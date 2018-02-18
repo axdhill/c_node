@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <thread>
-#include <atomic>
+#include <mutex>
 #include <netdb.h>
 #include <vector>
 #include <string>
@@ -26,16 +26,10 @@
 #include <cmath>
 
 
-<<<<<<< .merge_file_RjrN16
-=======
-std::atomic<char*> data;
-char pos_buffer[256];
->>>>>>> .merge_file_Tc9d3l
 
 
 int portno_tx;
 int portno;
-int delaytime;
 char UDP_IP[256];
 
 
@@ -81,7 +75,7 @@ void transmit_qc() {
 
     timespec deadline;
     deadline.tv_sec = 0;
-    deadline.tv_nsec = delaytime*1000000;    
+    deadline.tv_nsec = 20000000;    
     uint8_t id;
     int32_t adc[8];
     float volt[8];
@@ -161,7 +155,6 @@ void receive_data() {
         //printf("received message: \"%s\"\n", buf);
         //}
         printf("%s\n",buf);
-        data.store(buf, std::memory_order_relaxed);
 
 
         //std::this_thread::sleep_for (std::chrono::milliseconds(5));
@@ -179,7 +172,6 @@ int main(int argc, char** argv) {
     memcpy(UDP_IP, argv[1],256);
     portno = atoi(argv[2]);
     portno_tx = atoi(argv[3]);
-    delaytime = atoi(argv[4]);
 
 
     printf("%s\t%i\t%i\n",UDP_IP,portno,portno_tx);
