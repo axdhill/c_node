@@ -28,11 +28,17 @@
 #include "adc_lib.h"
 
 
+<<<<<<< .merge_file_riPekw
 #define  SER1_PORT   "/dev/ttyUSB1"
 #define SER2_PORT "/dev/ttyUSB0"
 std::atomic<unsigned> data;
 
 
+=======
+#define  SER1_PORT   "/dev/ttyUSB0"
+#define SER2_PORT "/dev/ttyUSB2"
+std::atomic<char*> data;
+>>>>>>> .merge_file_5pvoK3
 char pos_buffer[256];
 
 
@@ -89,10 +95,10 @@ void transmit_qc() {
     uint8_t id;
     int32_t adc[8];
     float volt[8];
-    uint8_t i;
     uint8_t ch_num;
     int32_t iTemp;
     uint8_t buf[3];
+    int error_count = 0;
     if (!bcm2835_init())
         return;
     bcm2835_spi_begin();
@@ -121,27 +127,35 @@ void transmit_qc() {
 
     int sendbuf_n;
     ADS1256_VAR_T* g_tADS1256 = get_state();
+<<<<<<< .merge_file_riPekw
 
 
 
     timespec deadline;
     deadline.tv_sec = 0;
     deadline.tv_nsec = 2000000;    
+=======
+    float v0,v1,v2;
+>>>>>>> .merge_file_5pvoK3
     while(!terminateProgram) {
 
         for( int i = 0; i < 3; i++) {
             while((DRDY_IS_LOW() == 0));
-
             ADS1256_SetChannel(i);	/*Switch channel mode */
     		bsp_DelayUS(25);
             adc[i] = ADS1256_ReadData();
             volt[i] = (adc[i] * 100.) / 167.;
+            // printf("\tMeasured voltage %f\n", volt[i]);
+            std::this_thread::sleep_for (std::chrono::microseconds(200));
+
         }
 
-
+        v0 = volt[0]/1000000.;
+        v1 = volt[1]/1000000.;
+        v2 = volt[2]/1000000.;
 
         bzero(buffer,256);
-        sprintf(buffer,"%0.8f %0.8f %0.8f",volt[0]/1000000.,volt[1]/1000000.,volt[2]/1000000.);
+        sprintf(buffer,"%0.8f %0.8f %0.8f",v2,v1,v0);
         //printf("\t%s\n",buffer);
         j++;
         //t_now = std::chrono::high_resolution_clock::now();
@@ -150,8 +164,12 @@ void transmit_qc() {
 
         //printf("\t%i\n", sendbuf_n);
 
+<<<<<<< .merge_file_riPekw
         clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
 
+=======
+        std::this_thread::sleep_for (std::chrono::milliseconds(7));
+>>>>>>> .merge_file_5pvoK3
     }
     bcm2835_spi_end();
     bcm2835_close();
@@ -196,7 +214,12 @@ void receive_data() {
     while(!terminateProgram) {
         recvlen = recvfrom(fd, buf, 256, 0, (struct sockaddr *)&remaddr, &addrlen);
         buf[recvlen] = 0;
+<<<<<<< .merge_file_riPekw
 		data.store(buf, std::memory_order_relaxed);
+=======
+        data.store(buf, std::memory_order_relaxed);
+
+>>>>>>> .merge_file_5pvoK3
     }
     close(fd);
     printf("Killed vicon thread\n");
@@ -204,6 +227,7 @@ void receive_data() {
 }
 
 
+<<<<<<< .merge_file_riPekw
 void acquire(serialib* ser1, serialib* ser2) {
 	printf("ACQUIRE:::\n");
     char buf[256];
@@ -281,6 +305,9 @@ void acquire(serialib* ser1, serialib* ser2) {
     return;
 
 }
+=======
+
+>>>>>>> .merge_file_5pvoK3
 
 void feedback() {
     signal (SIGINT, CtrlHandler);
@@ -308,7 +335,7 @@ void feedback() {
 
     int ret;
     char ser_buf[128];
-    ret = ser1.Open(SER1_PORT,57600);
+    //ret = ser1.Open(SER1_PORT,57600);
     // Open serial link at 115200 bauds
     if (ret != 1) {                                                           // If an error occured...
         printf ("Error while opening port. Permission problem ?\n");        // ... display a message ...
@@ -326,7 +353,7 @@ void feedback() {
     ser1.WriteString("C33H1024c;");
     ser2.WriteString("C33H1024c;");
 
-    char buf[256];
+    char* buf;
     int errorX,errorY;
 
 
@@ -345,10 +372,13 @@ void feedback() {
     deadline.tv_sec = 0;
     deadline.tv_nsec = 20000000; 
     while(!terminateProgram) {
-        //printf("1\n");
-
         buf = data.load(std::memory_order_relaxed);
 
+<<<<<<< .merge_file_riPekw
+        buf = data.load(std::memory_order_relaxed);
+
+=======
+>>>>>>> .merge_file_5pvoK3
 
         bufstr = std::string(buf);
         //printf("3\n");
@@ -365,7 +395,12 @@ void feedback() {
         std::istream_iterator<float>(),
         std::back_inserter(v));
         //printf("5\n");
+<<<<<<< .merge_file_riPekw
 //        printf("%0.8f,%0.8f,%0.8f\n",(v[0])/v[2],(v[1])/v[2],v[2]);
+=======
+        //ABC
+	//printf("%0.8f,%0.8f,%0.8f\n",(v[0])/v[2],(v[1])/v[2],v[2]);
+>>>>>>> .merge_file_5pvoK3
 
         value1 = v[0];
         value2 = v[1];
@@ -449,15 +484,15 @@ int main(int argc, char** argv) {
 
     printf("%s\t%i\t%i\n",UDP_IP,portno,portno_tx);
 
-    //std::thread t_transmit_qc(transmit_qc);
-    std::thread t_receive(receive_data);
-    std::thread t_feedback(feedback);
+    std::thread t_transmit_qc(transmit_qc);
+    //std::thread t_receive(receive_data);
+//    std::thread t_feedback(feedback);
 
     // Initialize variables
 
-    //t_transmit_qc.join();
-    t_receive.join();
-    t_feedback.join();
+    t_transmit_qc.join();
+    //t_receive.join();
+  //  t_feedback.join();
 
     return 0;
 }
