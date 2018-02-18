@@ -89,10 +89,10 @@ void transmit_qc() {
     uint8_t id;
     int32_t adc[8];
     float volt[8];
-    uint8_t i;
     uint8_t ch_num;
     int32_t iTemp;
     uint8_t buf[3];
+    int error_count = 0;
     if (!bcm2835_init())
         return;
     bcm2835_spi_begin();
@@ -121,27 +121,26 @@ void transmit_qc() {
 
     int sendbuf_n;
     ADS1256_VAR_T* g_tADS1256 = get_state();
-
-
-
-    timespec deadline;
-    deadline.tv_sec = 0;
-    deadline.tv_nsec = 2000000;    
+    float v0,v1,v2;
     while(!terminateProgram) {
 
         for( int i = 0; i < 3; i++) {
             while((DRDY_IS_LOW() == 0));
-
             ADS1256_SetChannel(i);	/*Switch channel mode */
     		bsp_DelayUS(25);
             adc[i] = ADS1256_ReadData();
             volt[i] = (adc[i] * 100.) / 167.;
+            // printf("\tMeasured voltage %f\n", volt[i]);
+            std::this_thread::sleep_for (std::chrono::microseconds(200));
+
         }
 
-
+        v0 = volt[0]/1000000.;
+        v1 = volt[1]/1000000.;
+        v2 = volt[2]/1000000.;
 
         bzero(buffer,256);
-        sprintf(buffer,"%0.8f %0.8f %0.8f",volt[0]/1000000.,volt[1]/1000000.,volt[2]/1000000.);
+        sprintf(buffer,"%0.8f %0.8f %0.8f",v2,v1,v0);
         //printf("\t%s\n",buffer);
         j++;
         //t_now = std::chrono::high_resolution_clock::now();
@@ -150,8 +149,7 @@ void transmit_qc() {
 
         //printf("\t%i\n", sendbuf_n);
 
-        clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
-
+        std::this_thread::sleep_for (std::chrono::milliseconds(7));
     }
     bcm2835_spi_end();
     bcm2835_close();
@@ -204,83 +202,6 @@ void receive_data() {
 }
 
 
-void acquire(serialib* ser1, serialib* ser2) {
-	printf("ACQUIRE:::\n");
-    char buf[256];
-    int errorX,errorY;
-
-    float KdX = 0.0;
-    float KdY = 0.0;
-    float DARK_LEVEL = 0.15;
-    float value1,value2,value3,v1norm,v2norm,v1_v,v2_v,v1norm_old,v2norm_old,v3_old;
-    value3 = 0;
-	std::string errXstr;
-    std::string errYstr;
-    std::vector<float> v;
-    std::string bufstr;
-    int d = 0;
-    float r = 20.;
-    float th = 0.;
-    int i = 0;
-    while(value3 < DARK_LEVEL) {
-
-        buf = data.load(std::memory_order_relaxed);
-
-        bufstr = std::string(buf);
-        //printf("3\n");
-        //printf("%s\n",bufstr.c_str());
-        if(bufstr == "") {
-            std::this_thread::sleep_for (std::chrono::milliseconds(50));
-            continue;
-        }
-
-        std::istringstream processbuf(bufstr);
-        //printf("processbuf:%s\n",processbuf.str().c_str());
-
-        std::copy(std::istream_iterator<float>(processbuf),
-        std::istream_iterator<float>(),
-        std::back_inserter(v));
-        //printf("5\n");
-        printf("%0.8f,%0.8f,%0.8f\n",v[0],v[1],v[2]);
-        value3 = v[2];
-        v.clear();
-
-        value3 = float(value3);
-
-        i++;
-	    th = fmod((th+30.0/(pow(r,(1/3.)))),360);
-        r += 0.25;
-
-
-        errorX = round(r*cos(th*3.14159/180.));
-        errorY = round(r*sin(th*3.14159/180.));
-        
-        errXstr = std::to_string(errorX);
-        errYstr = std::to_string(errorY);
-
-        if(errorX > 0) {
-            errXstr = "+"+errXstr;
-        } else {
-            errXstr = errXstr;
-        }
-        if(errorY > 0) {
-            errYstr = "+"+errYstr;
-        } else {
-            errYstr = errYstr;
-        }
-
-        if(errorX != 0) {
-            ser2->WriteString((errXstr+";").c_str());
-        }
-        if(errorY != 0) {
-            ser1->WriteString((errYstr+";").c_str());
-        }
-        std::this_thread::sleep_for (std::chrono::milliseconds(20));
-    }
-
-    return;
-
-}
 
 void feedback() {
     signal (SIGINT, CtrlHandler);
@@ -308,7 +229,7 @@ void feedback() {
 
     int ret;
     char ser_buf[128];
-    ret = ser1.Open(SER1_PORT,57600);
+    //ret = ser1.Open(SER1_PORT,57600);
     // Open serial link at 115200 bauds
     if (ret != 1) {                                                           // If an error occured...
         printf ("Error while opening port. Permission problem ?\n");        // ... display a message ...
@@ -326,7 +247,7 @@ void feedback() {
     ser1.WriteString("C33H1024c;");
     ser2.WriteString("C33H1024c;");
 
-    char buf[256];
+    char* buf;
     int errorX,errorY;
 
 
@@ -345,7 +266,7 @@ void feedback() {
     deadline.tv_sec = 0;
     deadline.tv_nsec = 20000000; 
     while(!terminateProgram) {
-        //printf("1\n");
+        buf = data.load(std::memory_order_relaxed);
 
         buf = data.load(std::memory_order_relaxed);
 
@@ -449,15 +370,15 @@ int main(int argc, char** argv) {
 
     printf("%s\t%i\t%i\n",UDP_IP,portno,portno_tx);
 
-    //std::thread t_transmit_qc(transmit_qc);
-    std::thread t_receive(receive_data);
-    std::thread t_feedback(feedback);
+    std::thread t_transmit_qc(transmit_qc);
+    //std::thread t_receive(receive_data);
+//    std::thread t_feedback(feedback);
 
     // Initialize variables
 
-    //t_transmit_qc.join();
-    t_receive.join();
-    t_feedback.join();
+    t_transmit_qc.join();
+    //t_receive.join();
+  //  t_feedback.join();
 
     return 0;
 }
