@@ -17,6 +17,7 @@
 #include <atomic>
 #include <netdb.h>
 #include <vector>
+#include <atomic>
 #include <string>
 #include <sstream>
 #include <iterator>
@@ -30,9 +31,7 @@
 
 #define  SER1_PORT   "/dev/ttyUSB1"
 #define SER2_PORT "/dev/ttyUSB0"
-std::atomic<unsigned> data;
-
-
+std::atomic<char*> data;
 char pos_buffer[256];
 
 
@@ -194,13 +193,12 @@ void receive_data() {
     while(!terminateProgram) {
         recvlen = recvfrom(fd, buf, 256, 0, (struct sockaddr *)&remaddr, &addrlen);
         buf[recvlen] = 0;
-		data.store(buf, std::memory_order_relaxed);
+        data.store(buf, std::memory_order_relaxed);
     }
     close(fd);
     printf("Killed vicon thread\n");
     return;
 }
-
 
 
 void feedback() {
@@ -253,7 +251,7 @@ void feedback() {
 
     float KdX = 0.0;
     float KdY = 0.0;
-    float DARK_LEVEL = 0.15;
+    float DARK_LEVEL = 0.1;
     float value1,value2,value3,v1norm,v2norm,v1_v,v2_v,v1norm_old,v2norm_old,v3_old;
     std::string errXstr;
     std::string errYstr;
@@ -262,21 +260,24 @@ void feedback() {
     std::string bufstr;
     int d = 0;
 
+    float Ix = 0.0;
+    float Iy = 0.0;
+
     timespec deadline;
     deadline.tv_sec = 0;
-    deadline.tv_nsec = 20000000; 
+    deadline.tv_nsec = 10000000; 
+    bool signal_lost = true;
     while(!terminateProgram) {
         buf = data.load(std::memory_order_relaxed);
-
-        buf = data.load(std::memory_order_relaxed);
-
-
+        if(buf == NULL) {
+            clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
+            continue;
+        }
         bufstr = std::string(buf);
         //printf("3\n");
         //printf("%s\n",bufstr.c_str());
         if(bufstr == "") {
-            clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
-            continue;
+           
         }
 
         std::istringstream processbuf(bufstr);
@@ -292,41 +293,48 @@ void feedback() {
         value2 = v[1];
         value3 = v[2];
         v.clear();
-        value1 = float(value1)-2.5;
-        value2 = float(value2)-2.5;
+        value1 = float(value1)-2.385;
+        value2 = float(value2)-2.385;
         value3 = float(value3);
 
         v1norm = value1/value3;
         v2norm = value2/value3;
 
-        v1norm = sgn(v1norm)*v1norm*v1norm;
-        v2norm = sgn(v2norm)*v2norm*v2norm;
-        printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
+        //printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
 
-
+        v1norm = sgn(v1norm)*pow(fabs(v1norm),7.0/5.);
+        v2norm = sgn(v2norm)*pow(fabs(v2norm),7.0/5.);
+        //ABC
+	//printf("%0.8f,%0.8f,%0.8f\n",v1norm,v2norm,v[2]);
 
         v1_v = (v1norm - v1norm_old);
         v2_v = (v2norm - v2norm_old);
 
-
-
-        errorX = int(round(v1norm * KpX  + v1_v * KdX));
-        errorY = int(round(v2norm * KpY +  v1_v * KdY));
-
-
+        errorX = int(round(v1norm * KpX  ));
+        errorY = int(round(v2norm * KpY ));
 
         v1norm_old = v1norm;
         v2norm_old = v2norm;
         if(value3 < DARK_LEVEL) {
             printf("LOST SIGNAL\n");
-            //clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
-
-            acquire(&ser1, &ser2);
+            clock_nanosleep(CLOCK_REALTIME,0,&deadline,NULL);
+	    signal_lost = true;
+            //acquire(&ser1, &ser2);
             continue;
         }
+	if(signal_lost) {
+		printf("LOCKED...\n");
+	}
+	signal_lost = false;
+
+
+
+        // Ix += v1norm/100.0;
+        // Iy += v2norm/100.0;
+
         errXstr = std::to_string(errorX);
         errYstr = std::to_string(errorY);
-	    printf("%i %i\n", errorX,errorY);
+	    //printf("%i %i\n", errorX,errorY);
         if(errorX > 0) {
             errXstr = "+"+errXstr;
         } else {
@@ -371,14 +379,13 @@ int main(int argc, char** argv) {
     printf("%s\t%i\t%i\n",UDP_IP,portno,portno_tx);
 
     std::thread t_transmit_qc(transmit_qc);
-    //std::thread t_receive(receive_data);
-//    std::thread t_feedback(feedback);
+    std::thread t_receive(receive_data);
+    std::thread t_feedback(feedback);
 
-    // Initialize variables
 
     t_transmit_qc.join();
-    //t_receive.join();
-  //  t_feedback.join();
+    t_receive.join();
+    t_feedback.join();
 
     return 0;
 }
